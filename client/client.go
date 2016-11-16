@@ -4,13 +4,17 @@ package client
 
 import (
 	"bufio"
+	"context"
+	"crypto/tls"
 	"net"
 	"sync"
 	"time"
 )
 
 var (
-	DefaultTimeout time.Duration = 1000
+	DefaultResponseTimeout time.Duration = 10 * time.Second
+	DefaultDialTimeout     time.Duration = 10 * time.Second
+	DefaultKeepAlive       time.Duration = 30 * time.Second
 )
 
 // One client connect to one server.
@@ -26,6 +30,7 @@ type Client struct {
 	rw                  *bufio.ReadWriter
 
 	ResponseTimeout time.Duration // response timeout for do() in ms
+	tlsConfig       *tls.Config
 
 	ErrorHandler ErrorHandler
 }
@@ -58,23 +63,39 @@ func (r *responseHandlerMap) put(key string, rh ResponseHandler) {
 }
 
 // Return a client.
-func New(network, addr string) (client *Client, err error) {
+func New(network, addr string, tlsConfig *tls.Config) (client *Client, err error) {
 	client = &Client{
 		net:             network,
 		addr:            addr,
 		respHandler:     newResponseHandlerMap(),
 		innerHandler:    newResponseHandlerMap(),
 		in:              make(chan *Response, queueSize),
-		ResponseTimeout: DefaultTimeout,
+		ResponseTimeout: DefaultResponseTimeout,
+		tlsConfig:       tlsConfig,
 	}
-	client.conn, err = net.Dial(client.net, client.addr)
+	if err = client.dial(); err != nil {
+		return
+	}
+	go client.readLoop()
+	go client.processLoop()
+	return
+}
+
+func (client *Client) dial() (err error) {
+	dialer := &net.Dialer{
+		Timeout:   DefaultDialTimeout,
+		KeepAlive: DefaultKeepAlive,
+	}
+	if client.tlsConfig != nil {
+		client.conn, err = tls.DialWithDialer(dialer, client.net, client.addr, client.tlsConfig)
+	} else {
+		client.conn, err = dialer.Dial(client.net, client.addr)
+	}
 	if err != nil {
 		return
 	}
 	client.rw = bufio.NewReadWriter(bufio.NewReader(client.conn),
 		bufio.NewWriter(client.conn))
-	go client.readLoop()
-	go client.processLoop()
 	return
 }
 
@@ -128,13 +149,10 @@ ReadLoop:
 			// closed by Gearmand, the client should close the conection
 			// and reconnect to job server.
 			client.Close()
-			client.conn, err = net.Dial(client.net, client.addr)
-			if err != nil {
+			if err = client.dial(); err != nil {
 				client.err(err)
 				break
 			}
-			client.rw = bufio.NewReadWriter(bufio.NewReader(client.conn),
-				bufio.NewWriter(client.conn))
 			continue
 		}
 		if len(leftdata) > 0 { // some data left for processing
@@ -215,7 +233,7 @@ type handleOrError struct {
 	err    error
 }
 
-func (client *Client) do(funcname string, data []byte,
+func (client *Client) do(ctx context.Context, funcname string, data []byte,
 	flag uint32) (handle string, err error) {
 	if client.conn == nil {
 		return "", ErrLostConn
@@ -239,21 +257,33 @@ func (client *Client) do(funcname string, data []byte,
 		client.lastcall = ""
 		return
 	}
-	var timer = time.After(client.ResponseTimeout * time.Millisecond)
+	var (
+		callCtx context.Context
+		cancel  context.CancelFunc
+	)
+	if client.ResponseTimeout > 0 {
+		// The request has a timeout, so create a context that is
+		// canceled automatically when the timeout expires.
+		callCtx, cancel = context.WithTimeout(ctx, client.ResponseTimeout)
+	} else {
+		callCtx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+
 	select {
 	case ret := <-result:
 		return ret.handle, ret.err
-	case <-timer:
+	case <-callCtx.Done():
 		client.innerHandler.remove("c")
 		client.lastcall = ""
-		return "", ErrLostConn
+		return "", ctx.Err()
 	}
 	return
 }
 
 // Call the function and get a response.
 // flag can be set to: JobLow, JobNormal and JobHigh
-func (client *Client) Do(funcname string, data []byte,
+func (client *Client) Do(ctx context.Context, funcname string, data []byte,
 	flag byte, h ResponseHandler) (handle string, err error) {
 	var datatype uint32
 	switch flag {
@@ -264,7 +294,7 @@ func (client *Client) Do(funcname string, data []byte,
 	default:
 		datatype = dtSubmitJob
 	}
-	handle, err = client.do(funcname, data, datatype)
+	handle, err = client.do(ctx, funcname, data, datatype)
 	if err == nil && h != nil {
 		client.respHandler.put(handle, h)
 	}
@@ -273,7 +303,7 @@ func (client *Client) Do(funcname string, data []byte,
 
 // Call the function in background, no response needed.
 // flag can be set to: JobLow, JobNormal and JobHigh
-func (client *Client) DoBg(funcname string, data []byte,
+func (client *Client) DoBg(ctx context.Context, funcname string, data []byte,
 	flag byte) (handle string, err error) {
 	if client.conn == nil {
 		return "", ErrLostConn
@@ -287,20 +317,19 @@ func (client *Client) DoBg(funcname string, data []byte,
 	default:
 		datatype = dtSubmitJobBg
 	}
-	handle, err = client.do(funcname, data, datatype)
+	handle, err = client.do(ctx, funcname, data, datatype)
 	return
 }
 
 // Get job status from job server.
-func (client *Client) Status(handle string) (status *Status, err error) {
+func (client *Client) Status(ctx context.Context, handle string) (status *Status, err error) {
 	if client.conn == nil {
 		return nil, ErrLostConn
 	}
-	var mutex sync.Mutex
-	mutex.Lock()
+	done := make(chan bool, 1)
 	client.lastcall = "s" + handle
 	client.innerHandler.put("s"+handle, func(resp *Response) {
-		defer mutex.Unlock()
+		defer close(done)
 		var err error
 		status, err = resp._status()
 		if err != nil {
@@ -310,28 +339,68 @@ func (client *Client) Status(handle string) (status *Status, err error) {
 	req := getRequest()
 	req.DataType = dtGetStatus
 	req.Data = []byte(handle)
-	client.write(req)
-	mutex.Lock()
+	if err = client.write(req); err != nil {
+		client.innerHandler.remove("s" + handle)
+		client.lastcall = ""
+		return
+	}
+
+	var (
+		callCtx context.Context
+		cancel  context.CancelFunc
+	)
+	if client.ResponseTimeout > 0 {
+		callCtx, cancel = context.WithTimeout(ctx, client.ResponseTimeout)
+	} else {
+		callCtx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+	select {
+	case <-callCtx.Done():
+		return nil, callCtx.Err()
+	case <-done:
+		return
+	}
 	return
 }
 
 // Echo.
-func (client *Client) Echo(data []byte) (echo []byte, err error) {
+func (client *Client) Echo(ctx context.Context, data []byte) (echo []byte, err error) {
 	if client.conn == nil {
 		return nil, ErrLostConn
 	}
-	var mutex sync.Mutex
-	mutex.Lock()
+	done := make(chan bool, 1)
 	client.innerHandler.put("e", func(resp *Response) {
+		defer close(done)
 		echo = resp.Data
-		mutex.Unlock()
 	})
 	req := getRequest()
 	req.DataType = dtEchoReq
 	req.Data = data
 	client.lastcall = "e"
-	client.write(req)
-	mutex.Lock()
+	if err = client.write(req); err != nil {
+		client.innerHandler.remove("e")
+		client.lastcall = ""
+		return
+	}
+	var (
+		callCtx context.Context
+		cancel  context.CancelFunc
+	)
+	if client.ResponseTimeout > 0 {
+		// The request has a timeout, so create a context that is
+		// canceled automatically when the timeout expires.
+		callCtx, cancel = context.WithTimeout(ctx, client.ResponseTimeout)
+	} else {
+		callCtx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+	select {
+	case <-callCtx.Done():
+		return nil, callCtx.Err()
+	case <-done:
+		return
+	}
 	return
 }
 

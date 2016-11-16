@@ -3,6 +3,7 @@
 package worker
 
 import (
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"sync"
@@ -59,9 +60,9 @@ func (worker *Worker) err(e error) {
 // Add a Gearman job server.
 //
 // addr should be formated as 'host:port'.
-func (worker *Worker) AddServer(net, addr string) (err error) {
+func (worker *Worker) AddServer(net, addr string, tlsConfig *tls.Config) (err error) {
 	// Create a new job server's client as a agent of server
-	a, err := newAgent(net, addr, worker)
+	a, err := newAgent(net, addr, worker, tlsConfig)
 	if err != nil {
 		return err
 	}
@@ -176,6 +177,7 @@ func (worker *Worker) Ready() (err error) {
 		if err = a.Connect(); err != nil {
 			return
 		}
+		a.Run()
 	}
 	for funcname, f := range worker.funcs {
 		worker.addFunc(funcname, f.timeout)

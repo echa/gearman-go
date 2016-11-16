@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ var client *Client
 func TestClientAddServer(t *testing.T) {
 	t.Log("Add local server 127.0.0.1:4730")
 	var err error
-	if client, err = New(Network, "127.0.0.1:4730"); err != nil {
+	if client, err = New(Network, "127.0.0.1:4730", nil); err != nil {
 		t.Fatal(err)
 	}
 	client.ErrorHandler = func(e error) {
@@ -22,7 +23,7 @@ func TestClientAddServer(t *testing.T) {
 }
 
 func TestClientEcho(t *testing.T) {
-	echo, err := client.Echo([]byte(TestStr))
+	echo, err := client.Echo(context.TODO(), []byte(TestStr))
 	if err != nil {
 		t.Error(err)
 		return
@@ -34,7 +35,7 @@ func TestClientEcho(t *testing.T) {
 }
 
 func TestClientDoBg(t *testing.T) {
-	handle, err := client.DoBg("ToUpper", []byte("abcdef"), JobLow)
+	handle, err := client.DoBg(context.TODO(), "ToUpper", []byte("abcdef"), JobLow)
 	if err != nil {
 		t.Error(err)
 		return
@@ -56,7 +57,7 @@ func TestClientDo(t *testing.T) {
 		}
 		return
 	}
-	handle, err := client.Do("ToUpper", []byte("abcdef"),
+	handle, err := client.Do(context.TODO(), "ToUpper", []byte("abcdef"),
 		JobLow, jobHandler)
 	if err != nil {
 		t.Error(err)
@@ -70,7 +71,7 @@ func TestClientDo(t *testing.T) {
 }
 
 func TestClientStatus(t *testing.T) {
-	status, err := client.Status("handle not exists")
+	status, err := client.Status(context.TODO(), "handle not exists")
 	if err != nil {
 		t.Error(err)
 		return
@@ -84,12 +85,12 @@ func TestClientStatus(t *testing.T) {
 		return
 	}
 
-	handle, err := client.Do("Delay5sec", []byte("abcdef"), JobLow, nil)
+	handle, err := client.Do(context.TODO(), "Delay5sec", []byte("abcdef"), JobLow, nil)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	status, err = client.Status(handle)
+	status, err = client.Status(context.TODO(), handle)
 	if err != nil {
 		t.Error(err)
 		return

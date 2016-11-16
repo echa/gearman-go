@@ -1,13 +1,11 @@
 package client
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
 	"math/rand"
 	"sync"
-)
-
-const (
-	poolSize = 10
 )
 
 var (
@@ -58,7 +56,7 @@ type Pool struct {
 }
 
 // Return a new pool.
-func NewPool() (pool *Pool) {
+func NewPool(poolSize int) (pool *Pool) {
 	return &Pool{
 		Clients:          make(map[string]*PoolClient, poolSize),
 		SelectionHandler: SelectWithRate,
@@ -66,7 +64,7 @@ func NewPool() (pool *Pool) {
 }
 
 // Add a server with rate.
-func (pool *Pool) Add(net, addr string, rate int) (err error) {
+func (pool *Pool) Add(net, addr string, rate int, tlsConfig *tls.Config) (err error) {
 	pool.mutex.Lock()
 	defer pool.mutex.Unlock()
 	var item *PoolClient
@@ -75,7 +73,7 @@ func (pool *Pool) Add(net, addr string, rate int) (err error) {
 		item.Rate = rate
 	} else {
 		var client *Client
-		client, err = New(net, addr)
+		client, err = New(net, addr, tlsConfig)
 		if err == nil {
 			item = &PoolClient{Client: client, Rate: rate}
 			pool.Clients[addr] = item
@@ -91,33 +89,33 @@ func (pool *Pool) Remove(addr string) {
 	delete(pool.Clients, addr)
 }
 
-func (pool *Pool) Do(funcname string, data []byte,
+func (pool *Pool) Do(ctx context.Context, funcname string, data []byte,
 	flag byte, h ResponseHandler) (addr, handle string, err error) {
 	client := pool.selectServer()
 	client.Lock()
 	defer client.Unlock()
-	handle, err = client.Do(funcname, data, flag, h)
+	handle, err = client.Do(ctx, funcname, data, flag, h)
 	addr = client.addr
 	return
 }
 
-func (pool *Pool) DoBg(funcname string, data []byte,
+func (pool *Pool) DoBg(ctx context.Context, funcname string, data []byte,
 	flag byte) (addr, handle string, err error) {
 	client := pool.selectServer()
 	client.Lock()
 	defer client.Unlock()
-	handle, err = client.DoBg(funcname, data, flag)
+	handle, err = client.DoBg(ctx, funcname, data, flag)
 	addr = client.addr
 	return
 }
 
 // Get job status from job server.
 // !!!Not fully tested.!!!
-func (pool *Pool) Status(addr, handle string) (status *Status, err error) {
+func (pool *Pool) Status(ctx context.Context, addr, handle string) (status *Status, err error) {
 	if client, ok := pool.Clients[addr]; ok {
 		client.Lock()
 		defer client.Unlock()
-		status, err = client.Status(handle)
+		status, err = client.Status(ctx, handle)
 	} else {
 		err = ErrNotFound
 	}
@@ -125,7 +123,7 @@ func (pool *Pool) Status(addr, handle string) (status *Status, err error) {
 }
 
 // Send a something out, get the samething back.
-func (pool *Pool) Echo(addr string, data []byte) (echo []byte, err error) {
+func (pool *Pool) Echo(ctx context.Context, addr string, data []byte) (echo []byte, err error) {
 	var client *PoolClient
 	if addr == "" {
 		client = pool.selectServer()
@@ -138,7 +136,7 @@ func (pool *Pool) Echo(addr string, data []byte) (echo []byte, err error) {
 	}
 	client.Lock()
 	defer client.Unlock()
-	echo, err = client.Echo(data)
+	echo, err = client.Echo(ctx, data)
 	return
 }
 

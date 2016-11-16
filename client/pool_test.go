@@ -1,20 +1,21 @@
 package client
 
 import (
+	"context"
 	"testing"
 )
 
 var (
-	pool = NewPool()
+	pool = NewPool(2)
 )
 
 func TestPoolAdd(t *testing.T) {
 	t.Log("Add servers")
 	c := 2
-	if err := pool.Add("tcp4", "127.0.0.1:4730", 1); err != nil {
+	if err := pool.Add("tcp4", "127.0.0.1:4730", 1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.Add("tcp4", "127.0.1.1:4730", 1); err != nil {
+	if err := pool.Add("tcp4", "127.0.1.1:4730", 1, nil); err != nil {
 		t.Log(err)
 		c -= 1
 	}
@@ -24,7 +25,7 @@ func TestPoolAdd(t *testing.T) {
 }
 
 func TestPoolEcho(t *testing.T) {
-	echo, err := pool.Echo("", []byte(TestStr))
+	echo, err := pool.Echo(context.TODO(), "", []byte(TestStr))
 	if err != nil {
 		t.Error(err)
 		return
@@ -34,14 +35,14 @@ func TestPoolEcho(t *testing.T) {
 		return
 	}
 
-	_, err = pool.Echo("not exists", []byte(TestStr))
+	_, err = pool.Echo(context.TODO(), "not exists", []byte(TestStr))
 	if err != ErrNotFound {
 		t.Errorf("ErrNotFound expected, got %s", err)
 	}
 }
 
 func TestPoolDoBg(t *testing.T) {
-	addr, handle, err := pool.DoBg("ToUpper",
+	addr, handle, err := pool.DoBg(context.TODO(), "ToUpper",
 		[]byte("abcdef"), JobLow)
 	if err != nil {
 		t.Error(err)
@@ -64,7 +65,7 @@ func TestPoolDo(t *testing.T) {
 		}
 		return
 	}
-	addr, handle, err := pool.Do("ToUpper",
+	addr, handle, err := pool.Do(context.TODO(), "ToUpper",
 		[]byte("abcdef"), JobLow, jobHandler)
 	if err != nil {
 		t.Error(err)
@@ -77,7 +78,7 @@ func TestPoolDo(t *testing.T) {
 }
 
 func TestPoolStatus(t *testing.T) {
-	status, err := pool.Status("127.0.0.1:4730", "handle not exists")
+	status, err := pool.Status(context.TODO(), "127.0.0.1:4730", "handle not exists")
 	if err != nil {
 		t.Error(err)
 		return
@@ -88,13 +89,13 @@ func TestPoolStatus(t *testing.T) {
 	if status.Running {
 		t.Errorf("The job (%s) shouldn't be running.", status.Handle)
 	}
-	addr, handle, err := pool.Do("Delay5sec",
+	addr, handle, err := pool.Do(context.TODO(), "Delay5sec",
 		[]byte("abcdef"), JobLow, nil)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	status, err = pool.Status(addr, handle)
+	status, err = pool.Status(context.TODO(), addr, handle)
 	if err != nil {
 		t.Error(err)
 		return
@@ -106,7 +107,7 @@ func TestPoolStatus(t *testing.T) {
 	if status.Running {
 		t.Errorf("The job (%s) shouldn't be running.", status.Handle)
 	}
-	status, err = pool.Status("not exists", "not exists")
+	status, err = pool.Status(context.TODO(), "not exists", "not exists")
 	if err != ErrNotFound {
 		t.Error(err)
 		return

@@ -22,7 +22,7 @@ func TestWorkerErrNoneAgents(t *testing.T) {
 
 func TestWorkerAddServer(t *testing.T) {
 	t.Log("Add local server 127.0.0.1:4730.")
-	if err := worker.AddServer(Network, "127.0.0.1:4730"); err != nil {
+	if err := worker.AddServer(Network, "127.0.0.1:4730", nil); err != nil {
 		t.Error(err)
 	}
 
@@ -83,7 +83,7 @@ func TestLargeDataWork(t *testing.T) {
 	worker := New(Unlimited)
 	defer worker.Close()
 
-	if err := worker.AddServer(Network, "127.0.0.1:4730"); err != nil {
+	if err := worker.AddServer(Network, "127.0.0.1:4730", nil); err != nil {
 		t.Error(err)
 	}
 	worker.Ready()
@@ -142,7 +142,7 @@ func TestWorkerClose(t *testing.T) {
 func TestWorkWithoutReady(t *testing.T) {
 	other_worker := New(Unlimited)
 
-	if err := other_worker.AddServer(Network, "127.0.0.1:4730"); err != nil {
+	if err := other_worker.AddServer(Network, "127.0.0.1:4730", nil); err != nil {
 		t.Error(err)
 	}
 	if err := other_worker.AddFunc("gearman-go-workertest", foobar, 0); err != nil {

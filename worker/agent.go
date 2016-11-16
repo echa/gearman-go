@@ -3,15 +3,23 @@ package worker
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/binary"
 	"io"
 	"net"
 	"sync"
+	"time"
+)
+
+var (
+	DefaultDialTimeout time.Duration = 10 * time.Second
+	DefaultKeepAlive   time.Duration = 30 * time.Second
 )
 
 // The agent of job server.
 type agent struct {
 	sync.Mutex
+	tlsConfig *tls.Config
 	conn      net.Conn
 	rw        *bufio.ReadWriter
 	worker    *Worker
@@ -20,12 +28,13 @@ type agent struct {
 }
 
 // Create the agent of job server.
-func newAgent(net, addr string, worker *Worker) (a *agent, err error) {
+func newAgent(net, addr string, worker *Worker, tlsConfig *tls.Config) (a *agent, err error) {
 	a = &agent{
-		net:    net,
-		addr:   addr,
-		worker: worker,
-		in:     make(chan []byte, queueSize),
+		tlsConfig: tlsConfig,
+		net:       net,
+		addr:      addr,
+		worker:    worker,
+		in:        make(chan []byte, queueSize),
 	}
 	return
 }
@@ -33,14 +42,29 @@ func newAgent(net, addr string, worker *Worker) (a *agent, err error) {
 func (a *agent) Connect() (err error) {
 	a.Lock()
 	defer a.Unlock()
-	a.conn, err = net.Dial(a.net, a.addr)
+	return a.connect()
+}
+
+func (a *agent) connect() (err error) {
+	dialer := &net.Dialer{
+		Timeout:   DefaultDialTimeout,
+		KeepAlive: DefaultKeepAlive,
+	}
+	if a.tlsConfig != nil {
+		a.conn, err = tls.DialWithDialer(dialer, a.net, a.addr, a.tlsConfig)
+	} else {
+		a.conn, err = dialer.Dial(a.net, a.addr)
+	}
 	if err != nil {
 		return
 	}
 	a.rw = bufio.NewReadWriter(bufio.NewReader(a.conn),
 		bufio.NewWriter(a.conn))
-	go a.work()
 	return
+}
+
+func (a *agent) Run() {
+	go a.work()
 }
 
 func (a *agent) work() {
@@ -75,13 +99,10 @@ func (a *agent) work() {
 			// closed by Gearmand, the agent should close the conection
 			// and reconnect to job server.
 			a.Close()
-			a.conn, err = net.Dial(a.net, a.addr)
-			if err != nil {
+			if err = a.Connect(); err != nil {
 				a.worker.err(err)
 				break
 			}
-			a.rw = bufio.NewReadWriter(bufio.NewReader(a.conn),
-				bufio.NewWriter(a.conn))
 		}
 		if len(leftdata) > 0 { // some data left for processing
 			data = append(leftdata, data...)
@@ -152,13 +173,9 @@ func (a *agent) PreSleep() {
 func (a *agent) reconnect() error {
 	a.Lock()
 	defer a.Unlock()
-	conn, err := net.Dial(a.net, a.addr)
-	if err != nil {
+	if err := a.connect(); err != nil {
 		return err
 	}
-	a.conn = conn
-	a.rw = bufio.NewReadWriter(bufio.NewReader(a.conn),
-		bufio.NewWriter(a.conn))
 	a.grab()
 	a.worker.reRegisterFuncsForAgent(a)
 
