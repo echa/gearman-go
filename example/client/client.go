@@ -36,7 +36,7 @@ func main() {
 			fallthrough
 		case client.WorkFail:
 			fallthrough
-		case client.WorkComplate:
+		case client.WorkComplete:
 			if data, err := resp.Result(); err == nil {
 				log.Printf("RESULT: %v\n", data)
 			} else {
