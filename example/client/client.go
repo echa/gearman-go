@@ -1,7 +1,8 @@
 package main
 
 import (
-	"github.com/mikespook/gearman-go/client"
+	"context"
+	"github.com/echa/gearman-go/client"
 	"log"
 	"os"
 	"sync"
@@ -12,8 +13,9 @@ func main() {
 	// You can write your own id generator
 	// by implementing IdGenerator interface.
 	// client.IdGen = client.NewAutoIncId()
+	ctx := context.Background()
 
-	c, err := client.New(client.Network, "127.0.0.1:4730")
+	c, err := client.New(client.Network, "127.0.0.1:4730", nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -23,7 +25,7 @@ func main() {
 		os.Exit(1)
 	}
 	echo := []byte("Hello\x00 world")
-	echomsg, err := c.Echo(echo)
+	echomsg, err := c.Echo(ctx, echo)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -58,17 +60,17 @@ func main() {
 			log.Printf("UNKNOWN: %v", resp.Data)
 		}
 	}
-	handle, err := c.Do("ToUpper", echo, client.JobNormal, jobHandler)
+	handle, err := c.Do(ctx, "ToUpper", echo, client.JobNormal, jobHandler)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	status, err := c.Status(handle)
+	status, err := c.Status(ctx, handle)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	log.Printf("%v", *status)
 
-	_, err = c.Do("Foobar", echo, client.JobNormal, jobHandler)
+	_, err = c.Do(ctx, "Foobar", echo, client.JobNormal, jobHandler)
 	if err != nil {
 		log.Fatalln(err)
 	}
