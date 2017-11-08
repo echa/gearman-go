@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -101,16 +102,15 @@ func (c *Client) connect() (err error) {
 		Timeout:   DefaultDialTimeout,
 		KeepAlive: DefaultKeepAlive,
 	}
-	if client.tlsConfig != nil {
-		client.conn, err = tls.DialWithDialer(dialer, client.net, client.addr, client.tlsConfig)
+	if c.tlsConfig != nil {
+		c.conn, err = tls.DialWithDialer(dialer, c.net, c.addr, c.tlsConfig)
 	} else {
-		client.conn, err = dialer.Dial(client.net, client.addr)
+		c.conn, err = dialer.Dial(c.net, c.addr)
 	}
 	if err != nil {
 		return
 	}
-	client.rw = bufio.NewReadWriter(bufio.NewReader(client.conn),
-		bufio.NewWriter(client.conn))
+	c.rw = bufio.NewReadWriter(bufio.NewReader(c.conn), bufio.NewWriter(c.conn))
 	return
 }
 
@@ -197,7 +197,7 @@ ReadLoop:
 	}
 }
 
-func (c *client) disconnect_error(err error) {
+func (c *Client) disconnect_error(err error) {
 	if c.conn != nil {
 		err = &DisconnectError{
 			err:    err,
