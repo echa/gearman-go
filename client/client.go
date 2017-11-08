@@ -91,7 +91,7 @@ func (c *Client) Connect() error {
 	return nil
 }
 
-func (c *client) work() {
+func (c *Client) work() {
 	go c.readLoop()
 	go c.processLoop()
 }
