@@ -72,12 +72,14 @@ func (pool *Pool) Add(net, addr string, rate int, tlsConfig *tls.Config) (err er
 	if item, ok = pool.Clients[addr]; ok {
 		item.Rate = rate
 	} else {
-		var client *Client
-		client, err = New(net, addr, tlsConfig)
-		if err == nil {
-			item = &PoolClient{Client: client, Rate: rate}
-			pool.Clients[addr] = item
+		item = &PoolClient{
+			Client: New(net, addr, tlsConfig),
+			Rate:   rate,
 		}
+		item.Client.ErrorHandler = pool.ErrorHandler
+		pool.Clients[addr] = item
+		// try connecting
+		return item.Client.Connect()
 	}
 	return
 }
@@ -86,6 +88,9 @@ func (pool *Pool) Add(net, addr string, rate int, tlsConfig *tls.Config) (err er
 func (pool *Pool) Remove(addr string) {
 	pool.mutex.Lock()
 	defer pool.mutex.Unlock()
+	if item, ok := pool.Clients[addr]; ok {
+		item.Client.Close()
+	}
 	delete(pool.Clients, addr)
 }
 

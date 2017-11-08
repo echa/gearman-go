@@ -63,7 +63,7 @@ func (r *responseHandlerMap) put(key string, rh ResponseHandler) {
 }
 
 // Return a client.
-func New(network, addr string, tlsConfig *tls.Config) (client *Client, err error) {
+func New(network, addr string, tlsConfig *tls.Config) (client *Client) {
 	client = &Client{
 		net:             network,
 		addr:            addr,
@@ -73,15 +73,30 @@ func New(network, addr string, tlsConfig *tls.Config) (client *Client, err error
 		ResponseTimeout: DefaultResponseTimeout,
 		tlsConfig:       tlsConfig,
 	}
-	if err = client.dial(); err != nil {
-		return
-	}
-	go client.readLoop()
-	go client.processLoop()
+	// if err = client.dial(); err != nil {
+	// 	return
+	// }
+	// go client.readLoop()
+	// go client.processLoop()
 	return
 }
 
-func (client *Client) dial() (err error) {
+func (c *Client) Connect() error {
+	c.Lock()
+	defer c.Unlock()
+	if err := c.connect(); err != nil {
+		return err
+	}
+	c.work()
+	return nil
+}
+
+func (c *client) work() {
+	go c.readLoop()
+	go c.processLoop()
+}
+
+func (c *Client) connect() (err error) {
 	dialer := &net.Dialer{
 		Timeout:   DefaultDialTimeout,
 		KeepAlive: DefaultKeepAlive,
@@ -136,21 +151,23 @@ ReadLoop:
 	for client.conn != nil {
 		if data, err = client.read(bufferSize); err != nil {
 			if opErr, ok := err.(*net.OpError); ok {
-				if opErr.Timeout() {
-					client.err(err)
-				}
 				if opErr.Temporary() {
 					continue
+				} else {
+					client.disconnect_error(err)
+					break
 				}
+			} else if err == io.EOF {
+				client.disconnect_error(err)
 				break
 			}
 			client.err(err)
 			// If it is unexpected error and the connection wasn't
-			// closed by Gearmand, the client should close the conection
+			// closed by Gearmand, the client should close the connection
 			// and reconnect to job server.
 			client.Close()
-			if err = client.dial(); err != nil {
-				client.err(err)
+			if err = client.connect(); err != nil {
+				client.disconnect_error(err)
 				break
 			}
 			continue
@@ -177,6 +194,16 @@ ReadLoop:
 			}
 			break
 		}
+	}
+}
+
+func (c *client) disconnect_error(err error) {
+	if c.conn != nil {
+		err = &DisconnectError{
+			err:    err,
+			client: c,
+		}
+		c.err(err)
 	}
 }
 
