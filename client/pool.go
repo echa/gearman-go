@@ -64,13 +64,12 @@ func NewPool(poolSize int) (pool *Pool) {
 }
 
 // Add a server with rate.
-func (pool *Pool) Add(net, addr string, rate int, tlsConfig *tls.Config) (err error) {
+func (pool *Pool) Add(net, addr string, rate int, tlsConfig *tls.Config) (c *Client, err error) {
 	pool.mutex.Lock()
 	defer pool.mutex.Unlock()
-	var item *PoolClient
-	var ok bool
-	if item, ok = pool.Clients[addr]; ok {
+	if item, ok := pool.Clients[addr]; ok {
 		item.Rate = rate
+		return item.Client, nil
 	} else {
 		item = &PoolClient{
 			Client: New(net, addr, tlsConfig),
@@ -79,9 +78,8 @@ func (pool *Pool) Add(net, addr string, rate int, tlsConfig *tls.Config) (err er
 		item.Client.ErrorHandler = pool.ErrorHandler
 		pool.Clients[addr] = item
 		// try connecting
-		return item.Client.Connect()
+		return item.Client, item.Client.Connect()
 	}
-	return
 }
 
 // Remove a server.

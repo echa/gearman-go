@@ -39,12 +39,6 @@ func (e *DisconnectError) Error() string {
 	return e.err.Error()
 }
 
-// Responds to the error by asking the worker to reconnect
-func (e *DisconnectError) Reconnect() (err error) {
-	return e.client.Connect()
-}
-
-// Which server was this for?
-func (e *DisconnectError) Server() (net string, addr string) {
-	return e.client.net, e.client.addr
+func (e *DisconnectError) Client() *Client {
+	return e.client
 }

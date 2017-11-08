@@ -64,22 +64,15 @@ func (r *responseHandlerMap) put(key string, rh ResponseHandler) {
 }
 
 // Return a client.
-func New(network, addr string, tlsConfig *tls.Config) (client *Client) {
-	client = &Client{
+func New(network, addr string, tlsConfig *tls.Config) *Client {
+	return &Client{
 		net:             network,
 		addr:            addr,
 		respHandler:     newResponseHandlerMap(),
 		innerHandler:    newResponseHandlerMap(),
-		in:              make(chan *Response, queueSize),
 		ResponseTimeout: DefaultResponseTimeout,
 		tlsConfig:       tlsConfig,
 	}
-	// if err = client.dial(); err != nil {
-	// 	return
-	// }
-	// go client.readLoop()
-	// go client.processLoop()
-	return
 }
 
 func (c *Client) Connect() error {
@@ -93,6 +86,7 @@ func (c *Client) Connect() error {
 }
 
 func (c *Client) work() {
+	c.in = make(chan *Response, queueSize)
 	go c.readLoop()
 	go c.processLoop()
 }
@@ -143,7 +137,8 @@ func (client *Client) read(length int) (data []byte, err error) {
 }
 
 func (client *Client) readLoop() {
-	defer close(client.in)
+	in := client.in
+	defer close(in)
 	var data, leftdata []byte
 	var err error
 	var resp *Response
@@ -186,7 +181,7 @@ ReadLoop:
 				leftdata = data[l:]
 				continue ReadLoop
 			} else {
-				client.in <- resp
+				in <- resp
 			}
 			data = data[l:]
 			if len(data) > 0 {
@@ -199,6 +194,7 @@ ReadLoop:
 
 func (c *Client) disconnect_error(err error) {
 	if c.conn != nil {
+		c.Close()
 		err = &DisconnectError{
 			err:    err,
 			client: c,
@@ -440,4 +436,9 @@ func (client *Client) Close() (err error) {
 		client.conn = nil
 	}
 	return
+}
+
+// Which server was this for?
+func (c *Client) Server() (net string, addr string) {
+	return c.net, c.addr
 }
