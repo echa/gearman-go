@@ -195,11 +195,10 @@ ReadLoop:
 func (c *Client) disconnect_error(err error) {
 	if c.conn != nil {
 		c.Close()
-		err = &DisconnectError{
+		c.err(&DisconnectError{
 			err:    err,
 			client: c,
-		}
-		c.err(err)
+		})
 	}
 }
 
