@@ -1,4 +1,5 @@
 // Copyright 2011 Xing Xing <mikespook@gmail.com> All rights reserved.
+// extended by Alexander Eichhorn<alex@kidtsunami.com>
 // Use of this source code is governed by a MIT
 // license that can be found in the LICENSE file.
 

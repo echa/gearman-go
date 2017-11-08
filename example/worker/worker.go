@@ -4,11 +4,11 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
-	"github.com/mikespook/gearman-go/worker"
-	"github.com/mikespook/golib/signal"
+	"github.com/echa/gearman-go/worker"
 )
 
 func ToUpper(job worker.Job) ([]byte, error) {
@@ -57,7 +57,7 @@ func main() {
 		log.Printf("Data=%s\n", job.Data())
 		return nil
 	}
-	w.AddServer("tcp4", "127.0.0.1:4730")
+	w.AddServer("tcp4", "127.0.0.1:4730", nil)
 	w.AddFunc("Foobar", Foobar, worker.Unlimited)
 	w.AddFunc("ToUpper", ToUpper, worker.Unlimited)
 	w.AddFunc("ToUpperTimeOut5", ToUpperDelay10, 5)
@@ -69,6 +69,7 @@ func main() {
 		return
 	}
 	go w.Work()
-	signal.Bind(os.Interrupt, func() uint { return signal.BreakExit })
-	signal.Wait()
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	<-c
 }

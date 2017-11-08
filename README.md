@@ -7,30 +7,30 @@ The protocols were written in pure Go. It contains two sub-packages:
 The client package is used for sending jobs to the Gearman job server,
 and getting responses from the server.
 
-	"github.com/mikespook/gearman-go/client"
+	"github.com/echa/gearman-go/client"
 
 The worker package will help developers in developing Gearman worker
 service easily.
 
-	"github.com/mikespook/gearman-go/worker"
+	"github.com/echa/gearman-go/worker"
 
-[![Build Status](https://travis-ci.org/mikespook/gearman-go.png?branch=master)](https://travis-ci.org/mikespook/gearman-go)
-[![GoDoc](https://godoc.org/github.com/mikespook/gearman-go?status.png)](https://godoc.org/github.com/mikespook/gearman-go)
+[![Build Status](https://travis-ci.org/echa/gearman-go.png?branch=master)](https://travis-ci.org/echa/gearman-go)
+[![GoDoc](https://godoc.org/github.com/echa/gearman-go?status.png)](https://godoc.org/github.com/echa/gearman-go)
 
 Install
 =======
 
 Install the client package:
 
-> $ go get github.com/mikespook/gearman-go/client
-	
+> $ go get github.com/echa/gearman-go/client
+
 Install the worker package:
 
-> $ go get github.com/mikespook/gearman-go/worker
+> $ go get github.com/echa/gearman-go/worker
 
 Both of them:
 
-> $ go get github.com/mikespook/gearman-go
+> $ go get github.com/echa/gearman-go
 
 Usage
 =====
@@ -38,7 +38,7 @@ Usage
 ## Worker
 
 ```go
-// Limit number of concurrent jobs execution. 
+// Limit number of concurrent jobs execution.
 // Use worker.Unlimited (0) if you want no limitation.
 w := worker.New(worker.OneByOne)
 w.ErrHandler = func(e error) {
@@ -75,7 +75,7 @@ jobHandler := func(resp *client.Response) {
 	log.Printf("%s", resp.Data)
 }
 handle, err := c.Do("ToUpper", echo, client.JobNormal, jobHandler)
-// ...	
+// ...
 ```
 
 Branches
@@ -87,7 +87,7 @@ __Use at your own risk!__
 
  * master current usable version
  * 0.2-dev Refactoring a lot of things
- * 0.1-testing Old API and some known issues, eg. [issue-14](https://github.com/mikespook/gearman-go/issues/14)
+ * 0.1-testing Old API and some known issues, eg. [issue-14](https://github.com/echa/gearman-go/issues/14)
 
 Contributors
 ============
@@ -95,7 +95,7 @@ Contributors
 Great thanks to all of you for your support and interest!
 
 (_Alphabetic order_)
- 
+
  * [Alex Zylman](https://github.com/azylman)
  * [C.R. Kirkwood-Watts](https://github.com/kirkwood)
  * [Damian Gryski](https://github.com/dgryski)
@@ -114,7 +114,7 @@ Great thanks to all of you for your support and interest!
 Maintainer
 ==========
 
- * [Xing Xing](http://mikespook.com) &lt;<mikespook@gmail.com>&gt; [@Twitter](http://twitter.com/mikespook)
+ * [Xing Xing](http://echa.com) &lt;<echa@gmail.com>&gt; [@Twitter](http://twitter.com/echa)
 
 Open Source - MIT Software License
 ==================================
