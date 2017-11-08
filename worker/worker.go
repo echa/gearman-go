@@ -330,23 +330,3 @@ func execTimeout(f JobFunc, job Job, timeout time.Duration) (r *result) {
 	}
 	return r
 }
-
-// Error type passed when a worker connection disconnects
-type WorkerDisconnectError struct {
-	err   error
-	agent *agent
-}
-
-func (e *WorkerDisconnectError) Error() string {
-	return e.err.Error()
-}
-
-// Responds to the error by asking the worker to reconnect
-func (e *WorkerDisconnectError) Reconnect() (err error) {
-	return e.agent.reconnect()
-}
-
-// Which server was this for?
-func (e *WorkerDisconnectError) Server() (net string, addr string) {
-	return e.agent.net, e.agent.addr
-}
